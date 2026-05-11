@@ -997,12 +997,51 @@ def _slugify(name: str) -> str:
     return base[:40] or "story"
 
 
+def _log_dir() -> Path:
+    """Pick a writable directory for log files. When frozen by PyInstaller
+    we sit next to the .exe (which the user can usually find easily);
+    otherwise we just use the current working directory."""
+    if getattr(sys, "frozen", False):
+        # sys.executable is the .exe path when frozen
+        return Path(sys.executable).resolve().parent
+    return Path.cwd()
+
+
 def main() -> None:
+    log_path = _log_dir() / "storyviz-error.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
-    StoryVizApp().run()
+    try:
+        StoryVizApp().run()
+    except Exception:  # noqa: BLE001
+        # In --windowed PyInstaller builds there is no console, so any
+        # startup crash is invisible to the user. Write the traceback to
+        # a file next to the .exe AND surface it via a Tk error popup so
+        # the user can copy-paste it back to us for debugging.
+        tb = traceback.format_exc()
+        try:
+            log_path.write_text(tb, encoding="utf-8")
+        except Exception:  # noqa: BLE001
+            pass
+        # Try to show a Tk dialog. If even that fails we re-raise so the
+        # console (if any) prints it.
+        try:
+            from tkinter import Tk, messagebox as mb
+
+            r = Tk()
+            r.withdraw()
+            mb.showerror(
+                "StoryViz — startup crash",
+                f"StoryViz could not start.\n\n"
+                f"Traceback was written to:\n{log_path}\n\n"
+                f"{tb}",
+            )
+            r.destroy()
+        except Exception:  # noqa: BLE001
+            pass
+        raise
 
 
 if __name__ == "__main__":
