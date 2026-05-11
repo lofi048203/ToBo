@@ -55,6 +55,72 @@ jobs:
           Write-Host "minimal hello.exe OK: $out"
           Remove-Item -Recurse -Force dist, build, hello.spec
 
+      - name: Diagnostic build (import each dep one at a time)
+        run: |
+          @'
+          import sys, traceback
+          steps = [
+              "import tkinter",
+              "import customtkinter",
+              "from PIL import Image",
+              "import requests",
+              "from bs4 import BeautifulSoup",
+              "import readability",
+              "import lxml.etree",
+              "from google import genai",
+              "import pydantic",
+              "import pydantic_core",
+          ]
+          for s in steps:
+              try:
+                  exec(s)
+                  sys.stdout.write("OK " + s + chr(10))
+                  sys.stdout.flush()
+              except Exception as e:
+                  sys.stdout.write("FAIL " + s + " -> " + repr(e) + chr(10))
+                  traceback.print_exc()
+                  sys.stdout.flush()
+                  sys.exit(2)
+          sys.stdout.write("all imports OK" + chr(10))
+          '@ | Out-File -Encoding utf8 -FilePath diag.py
+          pyinstaller --onefile --console --noupx --name diag `
+            --collect-all customtkinter `
+            --collect-all google.genai `
+            --collect-all google.auth `
+            --collect-all google.api_core `
+            --collect-all pydantic `
+            --collect-all pydantic_core `
+            --collect-all httpx `
+            --collect-all httpcore `
+            --collect-all anyio `
+            --collect-all certifi `
+            --collect-submodules readability `
+            --collect-submodules bs4 `
+            --copy-metadata google-genai `
+            --hidden-import PIL._tkinter_finder `
+            --hidden-import PIL.ImageTk `
+            --hidden-import lxml._elementpath `
+            --hidden-import lxml.html.clean `
+            diag.py
+          Write-Host '--- Running diag.exe ---'
+          $stdoutFile = New-TemporaryFile
+          $stderrFile = New-TemporaryFile
+          $proc = Start-Process -FilePath dist/diag.exe `
+            -PassThru -NoNewWindow `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+          $proc.WaitForExit()
+          Write-Host "diag.exe exit=$($proc.ExitCode)"
+          Write-Host '--- stdout ---'
+          Get-Content $stdoutFile
+          Write-Host '--- stderr ---'
+          Get-Content $stderrFile
+          if ($proc.ExitCode -ne 0) {
+            Write-Host "::error::diag.exe failed"
+            exit 1
+          }
+          Remove-Item -Recurse -Force dist, build, diag.spec
+
       - name: Build StoryViz.exe (windowed)
         run: >
           pyinstaller
