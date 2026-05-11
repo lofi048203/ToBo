@@ -63,6 +63,11 @@ jobs:
               "import tkinter",
               "import customtkinter",
               "from PIL import Image",
+              "import urllib3",
+              "import idna",
+              "import certifi",
+              "import charset_normalizer",
+              "import chardet",
               "import requests",
               "from bs4 import BeautifulSoup",
               "import readability",
@@ -72,6 +77,8 @@ jobs:
               "import pydantic_core",
           ]
           for s in steps:
+              sys.stdout.write("about to: " + s + chr(10))
+              sys.stdout.flush()
               try:
                   exec(s)
                   sys.stdout.write("OK " + s + chr(10))
