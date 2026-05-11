@@ -2,8 +2,17 @@ name: Build Windows .exe
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*'
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'analyzer.py'
+      - 'image_gen.py'
+      - 'prompts.py'
+      - 'requirements.txt'
+      - '.github/workflows/build-windows.yml'
   workflow_dispatch:
 
 permissions:
