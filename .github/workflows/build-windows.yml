@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,8 +28,14 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
           cache: pip
+
+      - name: Show toolchain versions
+        run: |
+          python --version
+          pip --version
+          systeminfo | Select-String -Pattern 'OS Name','OS Version'
 
       - name: Install dependencies
         run: |
@@ -37,35 +43,219 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller==6.11.1
 
-      - name: Build .exe with PyInstaller
+      - name: Smoke-test minimal PyInstaller build (no deps)
+        run: |
+          "import sys; print('hello from frozen', sys.version)" | Out-File -Encoding utf8 -FilePath hello.py
+          pyinstaller --onefile --console --name hello hello.py
+          $out = & dist/hello.exe
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::minimal hello.exe failed exit=$LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "minimal hello.exe OK: $out"
+          Remove-Item -Recurse -Force dist, build, hello.spec
+
+      - name: Diagnostic build (import each dep one at a time)
+        run: |
+          @'
+          import sys, traceback
+          steps = [
+              "import tkinter",
+              "import customtkinter",
+              "from PIL import Image",
+              "import urllib3",
+              "import idna",
+              "import certifi",
+              "import charset_normalizer",
+              "import chardet",
+              "import requests",
+              "from bs4 import BeautifulSoup",
+              "import readability",
+              "import lxml.etree",
+              "from google import genai",
+              "import pydantic",
+              "import pydantic_core",
+          ]
+          for s in steps:
+              sys.stdout.write("about to: " + s + chr(10))
+              sys.stdout.flush()
+              try:
+                  exec(s)
+                  sys.stdout.write("OK " + s + chr(10))
+                  sys.stdout.flush()
+              except Exception as e:
+                  sys.stdout.write("FAIL " + s + " -> " + repr(e) + chr(10))
+                  traceback.print_exc()
+                  sys.stdout.flush()
+                  sys.exit(2)
+          sys.stdout.write("all imports OK" + chr(10))
+          '@ | Out-File -Encoding utf8 -FilePath diag.py
+          pyinstaller --onefile --console --noupx --name diag `
+            --collect-all customtkinter `
+            --collect-all google.genai `
+            --collect-all google.auth `
+            --collect-all google.api_core `
+            --collect-all pydantic `
+            --collect-all pydantic_core `
+            --collect-all httpx `
+            --collect-all httpcore `
+            --collect-all anyio `
+            --collect-all certifi `
+            --collect-submodules readability `
+            --collect-submodules bs4 `
+            --copy-metadata google-genai `
+            --hidden-import PIL._tkinter_finder `
+            --hidden-import PIL.ImageTk `
+            --hidden-import lxml._elementpath `
+            --hidden-import lxml.html.clean `
+            --collect-all chardet `
+            diag.py
+          Write-Host '--- Running diag.exe ---'
+          $stdoutFile = New-TemporaryFile
+          $stderrFile = New-TemporaryFile
+          $proc = Start-Process -FilePath dist/diag.exe `
+            -PassThru -NoNewWindow `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+          $proc.WaitForExit()
+          Write-Host "diag.exe exit=$($proc.ExitCode)"
+          Write-Host '--- stdout ---'
+          Get-Content $stdoutFile
+          Write-Host '--- stderr ---'
+          Get-Content $stderrFile
+          if ($proc.ExitCode -ne 0) {
+            Write-Host "::error::diag.exe failed"
+            exit 1
+          }
+          Remove-Item -Recurse -Force dist, build, diag.spec
+
+      - name: Build StoryViz.exe (windowed)
         run: >
           pyinstaller
           --onefile
           --windowed
+          --noupx
           --name StoryViz
           --collect-all customtkinter
           --collect-all google.genai
+          --collect-all google.auth
+          --collect-all google.api_core
+          --collect-all pydantic
+          --collect-all pydantic_core
+          --collect-all httpx
+          --collect-all httpcore
+          --collect-all anyio
+          --collect-all certifi
           --collect-submodules readability
+          --collect-submodules bs4
+          --copy-metadata google-genai
+          --copy-metadata pydantic
+          --hidden-import app
           --hidden-import PIL._tkinter_finder
-          app.py
+          --hidden-import PIL.ImageTk
+          --hidden-import lxml._elementpath
+          --hidden-import lxml.html.clean
+          --collect-all chardet
+          launcher.py
 
-      - name: Verify .exe exists
+      - name: Build StoryViz-debug.exe (console)
+        run: >
+          pyinstaller
+          --onefile
+          --console
+          --noupx
+          --name StoryViz-debug
+          --collect-all chardet
+          --collect-all customtkinter
+          --collect-all google.genai
+          --collect-all google.auth
+          --collect-all google.api_core
+          --collect-all pydantic
+          --collect-all pydantic_core
+          --collect-all httpx
+          --collect-all httpcore
+          --collect-all anyio
+          --collect-all certifi
+          --collect-submodules readability
+          --collect-submodules bs4
+          --copy-metadata google-genai
+          --copy-metadata pydantic
+          --hidden-import app
+          --hidden-import PIL._tkinter_finder
+          --hidden-import PIL.ImageTk
+          --hidden-import lxml._elementpath
+          --hidden-import lxml.html.clean
+          launcher.py
+
+      - name: Verify .exes exist
         run: |
           if (!(Test-Path dist/StoryViz.exe)) { throw 'StoryViz.exe not found' }
-          Get-Item dist/StoryViz.exe | Format-List Name, Length, LastWriteTime
+          if (!(Test-Path dist/StoryViz-debug.exe)) { throw 'StoryViz-debug.exe not found' }
+          Get-Item dist/StoryViz.exe, dist/StoryViz-debug.exe | Format-List Name, Length, LastWriteTime
+
+      - name: Smoke-test StoryViz-debug.exe (capture any startup error)
+        run: |
+          $stdoutFile = New-TemporaryFile
+          $stderrFile = New-TemporaryFile
+          $proc = Start-Process -FilePath dist/StoryViz-debug.exe `
+            -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) {
+            Write-Host "::error::StoryViz-debug.exe exited within 8s (exit code $($proc.ExitCode))"
+            Write-Host '--- stdout ---'
+            Get-Content $stdoutFile
+            Write-Host '--- stderr ---'
+            Get-Content $stderrFile
+            if (Test-Path dist/storyviz-error.log) {
+              Write-Host '--- storyviz-error.log ---'
+              Get-Content dist/storyviz-error.log
+            }
+            if (Test-Path dist/storyviz-stderr.log) {
+              Write-Host '--- storyviz-stderr.log ---'
+              Get-Content dist/storyviz-stderr.log
+            }
+            exit 1
+          }
+          Write-Host 'StoryViz-debug.exe OK — still running after 8s, stopping'
+          Stop-Process -Id $proc.Id -Force
+
+      - name: Smoke-test StoryViz.exe (windowed)
+        run: |
+          $proc = Start-Process -FilePath dist/StoryViz.exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) {
+            Write-Host "::error::StoryViz.exe exited within 8s (exit code $($proc.ExitCode))"
+            if (Test-Path dist/storyviz-error.log) {
+              Write-Host '--- storyviz-error.log ---'
+              Get-Content dist/storyviz-error.log
+            }
+            if (Test-Path dist/storyviz-stderr.log) {
+              Write-Host '--- storyviz-stderr.log ---'
+              Get-Content dist/storyviz-stderr.log
+            }
+            exit 1
+          }
+          Write-Host 'StoryViz.exe OK — still running after 8s, stopping'
+          Stop-Process -Id $proc.Id -Force
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: StoryViz-windows
-          path: dist/StoryViz.exe
+          path: |
+            dist/StoryViz.exe
+            dist/StoryViz-debug.exe
           if-no-files-found: error
 
       - name: Create GitHub Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/StoryViz.exe
+          files: |
+            dist/StoryViz.exe
+            dist/StoryViz-debug.exe
           generate_release_notes: true
           body: |
             # StoryViz ${{ github.ref_name }}
@@ -77,6 +267,11 @@ jobs:
             1. Tải **`StoryViz.exe`** ở phần Assets bên dưới.
             2. Double-click để chạy. Lần đầu Windows SmartScreen có thể cảnh báo "Unrecognized app" — bấm **More info → Run anyway** (vì .exe chưa được code-sign).
             3. Lấy Google AI API key ở https://aistudio.google.com/app/apikey, dán vào ô **Google AI API key** trong app.
+
+            ## Nếu mở không lên
+
+            1. Thử `StoryViz-debug.exe` — phiên bản có console, sẽ in lỗi ra cửa sổ lệnh để bạn copy.
+            2. Hoặc xem file `storyviz-error.log` tạo ra cạnh file `.exe` sau khi crash.
 
             ## Yêu cầu Google AI account
 
