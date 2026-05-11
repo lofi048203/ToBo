@@ -1,0 +1,84 @@
+name: Build Windows .exe
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'analyzer.py'
+      - 'image_gen.py'
+      - 'prompts.py'
+      - 'requirements.txt'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.11.1
+
+      - name: Build .exe with PyInstaller
+        run: >
+          pyinstaller
+          --onefile
+          --windowed
+          --name StoryViz
+          --collect-all customtkinter
+          --collect-all google.genai
+          --collect-submodules readability
+          --hidden-import PIL._tkinter_finder
+          app.py
+
+      - name: Verify .exe exists
+        run: |
+          if (!(Test-Path dist/StoryViz.exe)) { throw 'StoryViz.exe not found' }
+          Get-Item dist/StoryViz.exe | Format-List Name, Length, LastWriteTime
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StoryViz-windows
+          path: dist/StoryViz.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/StoryViz.exe
+          generate_release_notes: true
+          body: |
+            # StoryViz ${{ github.ref_name }}
+
+            Phân tích truyện chữ tiếng Việt → prompt ảnh (Imagen / Nano Banana) + prompt video (Grok / Veo 3 / Seedance / Runway Gen-3 / Kling / Pika).
+
+            ## Cài đặt
+
+            1. Tải **`StoryViz.exe`** ở phần Assets bên dưới.
+            2. Double-click để chạy. Lần đầu Windows SmartScreen có thể cảnh báo "Unrecognized app" — bấm **More info → Run anyway** (vì .exe chưa được code-sign).
+            3. Lấy Google AI API key ở https://aistudio.google.com/app/apikey, dán vào ô **Google AI API key** trong app.
+
+            ## Yêu cầu Google AI account
+
+            - **Free tier**: `gemini-2.5-flash` (text) + Nano Banana (image) — đủ test, có quota daily.
+            - **Paid plan** (https://ai.dev/projects): mở khoá `gemini-2.5-pro` + Imagen 4 + quota cao hơn. Imagen 4 Fast ~$0.02/ảnh.
