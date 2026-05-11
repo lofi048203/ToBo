@@ -67,6 +67,7 @@ jobs:
               "import idna",
               "import certifi",
               "import charset_normalizer",
+              "import chardet",
               "import requests",
               "from bs4 import BeautifulSoup",
               "import readability",
@@ -107,7 +108,7 @@ jobs:
             --hidden-import PIL.ImageTk `
             --hidden-import lxml._elementpath `
             --hidden-import lxml.html.clean `
-            --exclude-module chardet `
+            --collect-all chardet `
             diag.py
           Write-Host '--- Running diag.exe ---'
           $stdoutFile = New-TemporaryFile
@@ -154,7 +155,7 @@ jobs:
           --hidden-import PIL.ImageTk
           --hidden-import lxml._elementpath
           --hidden-import lxml.html.clean
-          --exclude-module chardet
+          --collect-all chardet
           launcher.py
 
       - name: Build StoryViz-debug.exe (console)
@@ -164,7 +165,7 @@ jobs:
           --console
           --noupx
           --name StoryViz-debug
-          --exclude-module chardet
+          --collect-all chardet
           --collect-all customtkinter
           --collect-all google.genai
           --collect-all google.auth
