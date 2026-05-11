@@ -28,7 +28,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
           cache: pip
 
       - name: Show toolchain versions
@@ -43,11 +43,24 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller==6.11.1
 
+      - name: Smoke-test minimal PyInstaller build (no deps)
+        run: |
+          "import sys; print('hello from frozen', sys.version)" | Out-File -Encoding utf8 -FilePath hello.py
+          pyinstaller --onefile --console --name hello hello.py
+          $out = & dist/hello.exe
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::minimal hello.exe failed exit=$LASTEXITCODE"
+            exit 1
+          }
+          Write-Host "minimal hello.exe OK: $out"
+          Remove-Item -Recurse -Force dist, build, hello.spec
+
       - name: Build StoryViz.exe (windowed)
         run: >
           pyinstaller
           --onefile
           --windowed
+          --noupx
           --name StoryViz
           --collect-all customtkinter
           --collect-all google.genai
@@ -75,6 +88,7 @@ jobs:
           pyinstaller
           --onefile
           --console
+          --noupx
           --name StoryViz-debug
           --collect-all customtkinter
           --collect-all google.genai
