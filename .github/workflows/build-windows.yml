@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,6 +30,12 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
+
+      - name: Show toolchain versions
+        run: |
+          python --version
+          pip --version
+          systeminfo | Select-String -Pattern 'OS Name','OS Version'
 
       - name: Install dependencies
         run: |
