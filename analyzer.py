@@ -22,11 +22,18 @@ from prompts import (
 log = logging.getLogger(__name__)
 
 
-# Default Gemini model. The 2.5 line gives the best Vietnamese
-# comprehension; "flash" is fast enough for typical stories and a lot
-# cheaper. Users can override via the UI / constructor.
-DEFAULT_TEXT_MODEL = "gemini-2.5-pro"
-FAST_TEXT_MODEL = "gemini-2.5-flash"
+# Available Gemini text models for scene extraction. ``gemini-2.5-flash``
+# is the default because it works on the free tier and handles
+# Vietnamese well enough for short-to-medium stories. ``gemini-2.5-pro``
+# gives better reasoning but is gated behind a paid plan on most newer
+# accounts.
+DEFAULT_TEXT_MODEL = "gemini-2.5-flash"
+TEXT_MODELS: tuple[str, ...] = (
+    "gemini-2.5-flash",  # free tier, default
+    "gemini-2.5-pro",    # paid tier, deeper reasoning
+)
+# Kept for backward compatibility with old imports.
+FAST_TEXT_MODEL = DEFAULT_TEXT_MODEL
 
 # Hard cap to keep token usage sane. ~30k characters ≈ ~10k tokens for
 # Vietnamese which fits comfortably in Gemini's context window with

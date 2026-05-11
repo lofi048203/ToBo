@@ -9,8 +9,8 @@
   (Grok, Veo 3, Seedance, Runway Gen-3, Kling, Pika)
 - Nút **Tạo ảnh** gọi thẳng Imagen từ cùng một API key Google AI
 
-> Engine: `gemini-2.5-pro` để phân cảnh + `imagen-4.0-generate-001` để tạo ảnh.
-> Có thể chuyển sang `gemini-2.5-flash` / `imagen-3.0-*` trong UI nếu muốn rẻ/nhanh hơn.
+> Mặc định: `gemini-2.5-flash` (free tier) để phân cảnh + `gemini-2.5-flash-image` ("Nano Banana", free tier) để tạo ảnh.
+> Có thể chuyển sang `gemini-2.5-pro` để phân cảnh sâu hơn hoặc sang `imagen-4.0-*` để ảnh chất lượng cao hơn — cả hai đều yêu cầu **paid plan** trên Google AI.
 
 ---
 
@@ -32,6 +32,15 @@ Lần đầu tiên script sẽ tự tạo `.venv` và cài thư viện. Những 
 3. Copy key (`AIza...`) → dán vào ô **Google AI API key** trong app
 
 > App **không gửi key đi đâu khác** ngoài chính API Google.
+
+### Free tier vs Paid tier
+
+- **Free tier** (mặc định): có quota hàng ngày cho `gemini-2.5-flash` (text)
+  và `gemini-2.5-flash-image` / Nano Banana (image). Đủ để test và dùng cá
+  nhân, nhưng nếu phân tích nhiều truyện trong ngày sẽ gặp lỗi
+  `429 RESOURCE_EXHAUSTED` → chờ 24h hoặc upgrade.
+- **Paid plan** (https://ai.dev/projects): mở khoá `gemini-2.5-pro`,
+  `imagen-4.0-*` và quota cao hơn. Imagen 4 Fast chỉ ~$0.02/ảnh.
 
 ---
 

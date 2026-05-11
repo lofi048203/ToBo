@@ -37,7 +37,7 @@ from PIL import Image
 
 from analyzer import (
     DEFAULT_TEXT_MODEL,
-    FAST_TEXT_MODEL,
+    TEXT_MODELS,
     FetchError,
     Scene,
     StoryAnalysis,
@@ -47,9 +47,9 @@ from analyzer import (
 from image_gen import (
     ASPECT_RATIOS,
     DEFAULT_ASPECT_RATIO,
+    IMAGE_MODELS,
     ImageGenError,
     ImageGenerator,
-    PREFERRED_IMAGE_MODELS,
 )
 from prompts import VIDEO_STYLES
 
@@ -389,7 +389,7 @@ class StoryVizApp:
         self.style_hint_var = ctk.StringVar(value="cinematic photo")
         self.aspect_var = ctk.StringVar(value=DEFAULT_ASPECT_RATIO)
         self.model_var = ctk.StringVar(value=DEFAULT_TEXT_MODEL)
-        self.image_model_var = ctk.StringVar(value=PREFERRED_IMAGE_MODELS[0])
+        self.image_model_var = ctk.StringVar(value=IMAGE_MODELS[0])
         self.max_scenes_var = ctk.StringVar(value="8")
         self.status_var = ctk.StringVar(value="● Sẵn sàng")
         self.appearance_var = ctk.StringVar(value="System")
@@ -564,7 +564,7 @@ class StoryVizApp:
         ctk.CTkOptionMenu(
             body,
             variable=self.model_var,
-            values=[DEFAULT_TEXT_MODEL, FAST_TEXT_MODEL],
+            values=list(TEXT_MODELS),
             height=36,
             corner_radius=10,
             fg_color=CARD_BG,
@@ -573,12 +573,12 @@ class StoryVizApp:
         ).grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=(2, 12))
 
         ctk.CTkLabel(
-            body, text="Imagen model", font=ctk.CTkFont(size=12, weight="bold")
+            body, text="Image model", font=ctk.CTkFont(size=12, weight="bold")
         ).grid(row=0, column=2, sticky="w")
         ctk.CTkOptionMenu(
             body,
             variable=self.image_model_var,
-            values=list(PREFERRED_IMAGE_MODELS),
+            values=list(IMAGE_MODELS),
             height=36,
             corner_radius=10,
             fg_color=CARD_BG,
@@ -737,7 +737,7 @@ class StoryVizApp:
 
         ctk.CTkLabel(
             bar,
-            text="Powered by Gemini · Imagen",
+            text="Powered by Gemini · Imagen · Nano Banana",
             font=ctk.CTkFont(size=11),
             text_color=MUTED,
         ).pack(side="right")
