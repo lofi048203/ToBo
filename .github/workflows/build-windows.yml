@@ -67,7 +67,6 @@ jobs:
               "import idna",
               "import certifi",
               "import charset_normalizer",
-              "import chardet",
               "import requests",
               "from bs4 import BeautifulSoup",
               "import readability",
