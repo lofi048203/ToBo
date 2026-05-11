@@ -57,11 +57,12 @@ jobs:
           --collect-submodules bs4
           --copy-metadata google-genai
           --copy-metadata pydantic
+          --hidden-import app
           --hidden-import PIL._tkinter_finder
           --hidden-import PIL.ImageTk
           --hidden-import lxml._elementpath
           --hidden-import lxml.html.clean
-          app.py
+          launcher.py
 
       - name: Build StoryViz-debug.exe (console)
         run: >
@@ -83,11 +84,12 @@ jobs:
           --collect-submodules bs4
           --copy-metadata google-genai
           --copy-metadata pydantic
+          --hidden-import app
           --hidden-import PIL._tkinter_finder
           --hidden-import PIL.ImageTk
           --hidden-import lxml._elementpath
           --hidden-import lxml.html.clean
-          app.py
+          launcher.py
 
       - name: Verify .exes exist
         run: |
@@ -95,19 +97,51 @@ jobs:
           if (!(Test-Path dist/StoryViz-debug.exe)) { throw 'StoryViz-debug.exe not found' }
           Get-Item dist/StoryViz.exe, dist/StoryViz-debug.exe | Format-List Name, Length, LastWriteTime
 
-      - name: Smoke-test StoryViz.exe (start → close after 5s)
+      - name: Smoke-test StoryViz-debug.exe (capture any startup error)
         run: |
-          $proc = Start-Process -FilePath dist/StoryViz.exe -PassThru
-          Start-Sleep -Seconds 5
+          $stdoutFile = New-TemporaryFile
+          $stderrFile = New-TemporaryFile
+          $proc = Start-Process -FilePath dist/StoryViz-debug.exe `
+            -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+          Start-Sleep -Seconds 8
           if ($proc.HasExited) {
-            Write-Host "::error::StoryViz.exe exited within 5 seconds (exit code $($proc.ExitCode))"
+            Write-Host "::error::StoryViz-debug.exe exited within 8s (exit code $($proc.ExitCode))"
+            Write-Host '--- stdout ---'
+            Get-Content $stdoutFile
+            Write-Host '--- stderr ---'
+            Get-Content $stderrFile
             if (Test-Path dist/storyviz-error.log) {
               Write-Host '--- storyviz-error.log ---'
               Get-Content dist/storyviz-error.log
             }
+            if (Test-Path dist/storyviz-stderr.log) {
+              Write-Host '--- storyviz-stderr.log ---'
+              Get-Content dist/storyviz-stderr.log
+            }
             exit 1
           }
-          Write-Host "OK — still running after 5s, stopping"
+          Write-Host 'StoryViz-debug.exe OK — still running after 8s, stopping'
+          Stop-Process -Id $proc.Id -Force
+
+      - name: Smoke-test StoryViz.exe (windowed)
+        run: |
+          $proc = Start-Process -FilePath dist/StoryViz.exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) {
+            Write-Host "::error::StoryViz.exe exited within 8s (exit code $($proc.ExitCode))"
+            if (Test-Path dist/storyviz-error.log) {
+              Write-Host '--- storyviz-error.log ---'
+              Get-Content dist/storyviz-error.log
+            }
+            if (Test-Path dist/storyviz-stderr.log) {
+              Write-Host '--- storyviz-stderr.log ---'
+              Get-Content dist/storyviz-stderr.log
+            }
+            exit 1
+          }
+          Write-Host 'StoryViz.exe OK — still running after 8s, stopping'
           Stop-Process -Id $proc.Id -Force
 
       - name: Upload workflow artifact
