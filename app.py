@@ -73,7 +73,12 @@ APP_BG = ("#f5f3ff", "#0f172a")  # subtle violet wash on light mode
 
 
 class Card(ctk.CTkFrame):
-    """A bordered, rounded section with a small header label."""
+    """A bordered, rounded section with a small header label.
+
+    If ``collapsible=True`` a small chevron button is shown on the right
+    of the header. Clicking it toggles the body visibility, freeing
+    vertical space for the scene list below.
+    """
 
     def __init__(
         self,
@@ -82,6 +87,8 @@ class Card(ctk.CTkFrame):
         title: str,
         step: Optional[str] = None,
         subtitle: Optional[str] = None,
+        collapsible: bool = False,
+        start_collapsed: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -117,16 +124,66 @@ class Card(ctk.CTkFrame):
             anchor="w",
         ).pack(anchor="w", fill="x")
         if subtitle:
-            ctk.CTkLabel(
+            self._subtitle_label = ctk.CTkLabel(
                 text_box,
                 text=subtitle,
                 font=ctk.CTkFont(size=11),
                 text_color=MUTED,
                 anchor="w",
-            ).pack(anchor="w", fill="x")
+            )
+            self._subtitle_label.pack(anchor="w", fill="x")
+        else:
+            self._subtitle_label = None
 
         self.body = ctk.CTkFrame(self, fg_color="transparent")
         self.body.pack(fill="both", expand=True, padx=16, pady=(0, 14))
+
+        self._expanded = True
+        self._toggle_btn: Optional[ctk.CTkButton] = None
+        if collapsible:
+            self._toggle_btn = ctk.CTkButton(
+                header,
+                text="⌃",
+                width=32,
+                height=32,
+                corner_radius=8,
+                fg_color="transparent",
+                hover_color=CARD_BORDER,
+                text_color=("#1e293b", "#e2e8f0"),
+                font=ctk.CTkFont(size=18, weight="bold"),
+                command=self.toggle,
+            )
+            self._toggle_btn.pack(side="right", padx=(8, 0))
+            if start_collapsed:
+                # Defer the collapse so the body has been laid out first
+                # (otherwise CTk can complain about unmanaged widgets).
+                self.after(0, self.collapse)
+
+    def toggle(self) -> None:
+        if self._expanded:
+            self.collapse()
+        else:
+            self.expand()
+
+    def collapse(self) -> None:
+        if not self._expanded:
+            return
+        self.body.pack_forget()
+        if self._subtitle_label is not None:
+            self._subtitle_label.pack_forget()
+        if self._toggle_btn is not None:
+            self._toggle_btn.configure(text="⌄")
+        self._expanded = False
+
+    def expand(self) -> None:
+        if self._expanded:
+            return
+        if self._subtitle_label is not None:
+            self._subtitle_label.pack(anchor="w", fill="x")
+        self.body.pack(fill="both", expand=True, padx=16, pady=(0, 14))
+        if self._toggle_btn is not None:
+            self._toggle_btn.configure(text="⌃")
+        self._expanded = True
 
 
 class SceneCard(ctk.CTkFrame):
@@ -471,6 +528,7 @@ class StoryVizApp:
             title="Link truyện / blog / web novel",
             subtitle="Dán link bài đăng có nội dung văn bản. App sẽ tự bóc lấy phần nội dung chính.",
             step="1",
+            collapsible=True,
         )
         body = card.body
         body.grid_columnconfigure(0, weight=1)
@@ -537,6 +595,7 @@ class StoryVizApp:
             title="API key + tuỳ chọn",
             subtitle="Cần Google AI API key. Lấy miễn phí tại aistudio.google.com/app/apikey.",
             step="2",
+            collapsible=True,
         )
         body = card.body
         body.grid_columnconfigure(0, weight=2)
