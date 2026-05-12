@@ -18,7 +18,55 @@ VIDEO_STYLES: tuple[str, ...] = (
 )
 
 
-SCENE_SYSTEM_PROMPT = """\
+# Supported output languages.
+#
+# ``auto`` lets the model decide based on the source story's language.
+# ``vi`` / ``en`` force Vietnamese / English regardless of source.
+OUTPUT_LANGUAGES: tuple[str, ...] = ("auto", "vi", "en")
+DEFAULT_OUTPUT_LANGUAGE = "auto"
+
+
+def _language_clause(language: str) -> str:
+    """Return the section of the system prompt that pins the output
+    language for the scene metadata (title, summary) AND for the
+    image/video prompts."""
+    lang = (language or "auto").lower()
+    if lang == "vi":
+        return (
+            "NGÔN NGỮ OUTPUT\n"
+            "===============\n"
+            "- `title` và `summary`: viết bằng TIẾNG VIỆT.\n"
+            "- `image_prompt` và mọi `video_prompts`: viết bằng TIẾNG VIỆT.\n"
+            "  Giữ nguyên các thuật ngữ kỹ thuật phim ảnh phổ biến (ví dụ:\n"
+            "  cinematic photo, anime, depth of field, dolly-in, wide shot,\n"
+            "  35mm) nếu chúng giúp model AI hiểu rõ hơn — phần còn lại\n"
+            "  hoàn toàn bằng tiếng Việt.\n"
+            "- Tuyệt đối không trộn tiếng Anh dài cả câu vào.\n"
+        )
+    if lang == "en":
+        return (
+            "OUTPUT LANGUAGE\n"
+            "===============\n"
+            "- `title` and `summary`: write in ENGLISH.\n"
+            "- `image_prompt` and every entry of `video_prompts`: write in\n"
+            "  ENGLISH.\n"
+            "- Translate proper nouns (character names, place names) into\n"
+            "  Latin / English transliteration; preserve the original\n"
+            "  meaning. Do NOT leave any Vietnamese phrases.\n"
+        )
+    # auto
+    return (
+        "NGÔN NGỮ OUTPUT\n"
+        "===============\n"
+        "- Phát hiện ngôn ngữ chính của truyện (Tiếng Việt hay tiếng Anh).\n"
+        "- `title` và `summary`: viết bằng CÙNG ngôn ngữ với truyện gốc.\n"
+        "- `image_prompt` và `video_prompts`: viết bằng TIẾNG ANH vì hầu\n"
+        "  hết các engine AI ảnh / video hoạt động tốt nhất với tiếng\n"
+        "  Anh. Giữ nguyên tên riêng từ truyện gốc.\n"
+    )
+
+
+SCENE_SYSTEM_PROMPT_TEMPLATE = """\
 Bạn là một nhà phân cảnh phim chuyên nghiệp (storyboard artist) đồng thời là
 chuyên gia viết prompt cho các mô hình AI tạo ảnh và tạo video.
 
@@ -31,24 +79,22 @@ Việt (hoặc bất kỳ ngôn ngữ nào). Bạn phải:
 2. Chia câu chuyện thành các PHÂN CẢNH (scene) liên tục, mỗi phân cảnh là
    một khoảnh khắc có thể minh họa bằng một bức ảnh / một đoạn clip 5-10s.
 3. Với MỖI phân cảnh, sinh ra:
-   - `title`: tiêu đề ngắn gọn bằng tiếng Việt (≤ 10 chữ)
-   - `summary`: tóm tắt 1-2 câu bằng tiếng Việt về diễn biến chính của
-     phân cảnh đó
-   - `image_prompt`: prompt TIẾNG ANH cực kỳ chi tiết để đưa vào Imagen.
+   - `title`: tiêu đề ngắn gọn (≤ 10 chữ)
+   - `summary`: tóm tắt 1-2 câu về diễn biến chính của phân cảnh đó
+   - `image_prompt`: prompt cực kỳ chi tiết để đưa vào Imagen / Nano Banana.
      Mô tả rõ chủ thể, hành động, biểu cảm, trang phục, bối cảnh, ánh
      sáng, góc máy, phong cách (cinematic photo / anime / oil painting /
      ...). Khoảng 60-120 từ. KHÔNG để trống.
    - `video_prompts`: một object có khóa là tên engine, giá trị là prompt
-     TIẾNG ANH được tối ưu cho engine đó. Mỗi prompt 30-80 từ, mô tả
-     hành động / chuyển động camera / âm thanh / nhịp 5-10 giây.
+     được tối ưu cho engine đó. Mỗi prompt 30-80 từ, mô tả hành động /
+     chuyển động camera / âm thanh / nhịp 5-10 giây.
      Các engine bắt buộc phải có (đúng tên này, đúng chính tả):
      {video_styles}
 
+{language_clause}
 QUY TẮC
 =======
-- Image prompt và video prompt phải BẰNG TIẾNG ANH vì các engine chỉ hỗ
-  trợ tiếng Anh. Tuyệt đối không xen tiếng Việt vào.
-- Giữ nguyên TÊN RIÊNG (nhân vật, địa danh) trong prompt tiếng Anh.
+- Giữ nguyên TÊN RIÊNG (nhân vật, địa danh) trong mọi prompt.
 - Mô tả nhân vật phải NHẤT QUÁN giữa các phân cảnh — cùng một nhân vật
   thì cùng trang phục, cùng tuổi, cùng đặc điểm. Lặp lại các đặc điểm
   này ở mọi phân cảnh có nhân vật đó xuất hiện.
@@ -59,10 +105,14 @@ QUY TẮC
 """
 
 
-def render_scene_system_prompt() -> str:
-    """Embed the runtime list of video styles into the system prompt."""
+def render_scene_system_prompt(language: str = DEFAULT_OUTPUT_LANGUAGE) -> str:
+    """Embed the runtime list of video styles + language clause into the
+    system prompt."""
     bullet = "\n     ".join(f"* {name}" for name in VIDEO_STYLES)
-    return SCENE_SYSTEM_PROMPT.format(video_styles=bullet)
+    return SCENE_SYSTEM_PROMPT_TEMPLATE.format(
+        video_styles=bullet,
+        language_clause=_language_clause(language),
+    )
 
 
 SCENE_RESPONSE_SCHEMA: dict = {
@@ -70,7 +120,10 @@ SCENE_RESPONSE_SCHEMA: dict = {
     "properties": {
         "story_title": {
             "type": "string",
-            "description": "Tiêu đề ngắn cho toàn bộ câu chuyện (tiếng Việt).",
+            "description": (
+                "Tiêu đề ngắn cho toàn bộ câu chuyện, theo ngôn ngữ "
+                "output đã chọn."
+            ),
         },
         "art_style": {
             "type": "string",

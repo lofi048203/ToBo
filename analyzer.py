@@ -14,6 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from prompts import (
+    DEFAULT_OUTPUT_LANGUAGE,
     SCENE_RESPONSE_SCHEMA,
     VIDEO_STYLES,
     render_scene_system_prompt,
@@ -175,6 +176,7 @@ class StoryAnalyzer:
         max_scenes: Optional[int] = None,
         extra_style_hint: str = "",
         source_url: Optional[str] = None,
+        language: str = DEFAULT_OUTPUT_LANGUAGE,
     ) -> StoryAnalysis:
         from google.genai import types
 
@@ -193,14 +195,19 @@ class StoryAnalyzer:
             story_text=story_text,
             max_scenes=max_scenes,
             extra_style_hint=extra_style_hint,
+            language=language,
         )
 
-        log.info("Calling Gemini %s for scene analysis", self.model)
+        log.info(
+            "Calling Gemini %s for scene analysis (lang=%s)",
+            self.model,
+            language,
+        )
         response = self._client.models.generate_content(
             model=self.model,
             contents=user_msg,
             config=types.GenerateContentConfig(
-                system_instruction=render_scene_system_prompt(),
+                system_instruction=render_scene_system_prompt(language),
                 response_mime_type="application/json",
                 response_schema=SCENE_RESPONSE_SCHEMA,
                 temperature=0.7,
@@ -242,12 +249,33 @@ class StoryAnalyzer:
 
 
 def _build_user_message(
-    *, story_text: str, max_scenes: Optional[int], extra_style_hint: str
+    *,
+    story_text: str,
+    max_scenes: Optional[int],
+    extra_style_hint: str,
+    language: str = DEFAULT_OUTPUT_LANGUAGE,
 ) -> str:
     parts: list[str] = []
     parts.append("Hãy phân tích CÂU CHUYỆN dưới đây thành các phân cảnh.")
     if max_scenes:
         parts.append(f"Số phân cảnh tối đa: {max_scenes}.")
+    lang = (language or "auto").lower()
+    if lang == "vi":
+        parts.append(
+            "Ngôn ngữ output: TIẾNG VIỆT cho tất cả các trường "
+            "(title, summary, image_prompt, video_prompts)."
+        )
+    elif lang == "en":
+        parts.append(
+            "Output language: ENGLISH for every field (title, summary, "
+            "image_prompt, video_prompts)."
+        )
+    else:
+        parts.append(
+            "Ngôn ngữ output: tự động theo ngôn ngữ của truyện cho "
+            "title/summary; giữ nguyên TIẾNG ANH cho image_prompt và "
+            "video_prompts."
+        )
     if extra_style_hint.strip():
         parts.append(
             f"Phong cách hình ảnh mong muốn: {extra_style_hint.strip()}. "

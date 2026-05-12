@@ -51,7 +51,20 @@ from image_gen import (
     ImageGenError,
     ImageGenerator,
 )
-from prompts import VIDEO_STYLES
+from prompts import (
+    DEFAULT_OUTPUT_LANGUAGE,
+    OUTPUT_LANGUAGES,
+    VIDEO_STYLES,
+)
+
+# User-facing labels for the language selector. Internal codes (used to
+# parameterize the Gemini prompt) come from ``prompts.OUTPUT_LANGUAGES``.
+LANGUAGE_LABELS: dict[str, str] = {
+    "auto": "Auto (theo truyện)",
+    "vi": "Tiếng Việt",
+    "en": "English",
+}
+LABEL_TO_CODE: dict[str, str] = {v: k for k, v in LANGUAGE_LABELS.items()}
 
 
 APP_TITLE = "StoryViz"
@@ -448,6 +461,9 @@ class StoryVizApp:
         self.model_var = ctk.StringVar(value=DEFAULT_TEXT_MODEL)
         self.image_model_var = ctk.StringVar(value=IMAGE_MODELS[0])
         self.max_scenes_var = ctk.StringVar(value="8")
+        self.lang_var = ctk.StringVar(
+            value=LANGUAGE_LABELS.get(DEFAULT_OUTPUT_LANGUAGE, "Auto (theo truyện)")
+        )
         self.status_var = ctk.StringVar(value="● Sẵn sàng")
         self.appearance_var = ctk.StringVar(value="System")
 
@@ -692,6 +708,34 @@ class StoryVizApp:
 
         out_row = ctk.CTkFrame(body, fg_color="transparent")
         out_row.grid(row=3, column=2, columnspan=2, sticky="ew")
+        # Row 4/5: language selector
+        ctk.CTkLabel(
+            body,
+            text="Ngôn ngữ output",
+            font=ctk.CTkFont(size=12, weight="bold"),
+        ).grid(row=4, column=0, sticky="w", pady=(12, 0))
+        ctk.CTkOptionMenu(
+            body,
+            variable=self.lang_var,
+            values=[LANGUAGE_LABELS[c] for c in OUTPUT_LANGUAGES],
+            height=36,
+            corner_radius=10,
+            fg_color=CARD_BG,
+            button_color=PRIMARY,
+            button_hover_color=PRIMARY_HOVER,
+        ).grid(row=5, column=0, sticky="ew", padx=(0, 10), pady=(2, 0))
+
+        ctk.CTkLabel(
+            body,
+            text=(
+                "Auto: title/summary theo truyện, prompt tiếng Anh (tối ưu cho AI ảnh/video).\n"
+                "Tiếng Việt / English: ép tất cả các trường về cùng 1 ngôn ngữ."
+            ),
+            font=ctk.CTkFont(size=11),
+            text_color=MUTED,
+            anchor="w",
+            justify="left",
+        ).grid(row=5, column=1, columnspan=3, sticky="ew", pady=(2, 0))
         out_row.grid_columnconfigure(0, weight=1)
 
         self.output_dir_var = ctk.StringVar(value=str(Path.cwd() / "generated"))
@@ -879,6 +923,9 @@ class StoryVizApp:
                 text,
                 max_scenes=max_scenes,
                 extra_style_hint=self.style_hint_var.get(),
+                language=LABEL_TO_CODE.get(
+                    self.lang_var.get(), DEFAULT_OUTPUT_LANGUAGE
+                ),
                 source_url=source_url,
             )
             self.root.after(0, lambda: self._render_analysis(analysis))
